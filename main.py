@@ -8,6 +8,18 @@ GRID_COLOR = "#184d2f"
 HUD_FILL = "#f4fff4"
 HUD_BORDER = "#184d2f"
 STATUS_FILL = "#ecffec"
+LEVEL_UP_SCORE = 10
+MEGA_FOOD_SCORE = 15
+MEGA_FOOD_DURATION = 5
+BASE_MOVE_SPEED = 4
+BASE_ENEMY_SPEED = 1
+MIN_SPAWN_DISTANCE = 70
+TERRAIN_THEMES = [
+    {"bg": "#d9f7d9", "grid": "#184d2f", "accent": "#2d8a57", "label": "GRASSLAND"},
+    {"bg": "#efe0b8", "grid": "#7a4a12", "accent": "#b06b1f", "label": "DUNES"},
+    {"bg": "#dcecff", "grid": "#24507a", "accent": "#4f84ba", "label": "FROST"},
+    {"bg": "#f0d8d8", "grid": "#7a1f1f", "accent": "#d14b4b", "label": "EMBER"},
+]
 
 # Screen setup
 screen = turtle.Screen()
@@ -47,8 +59,74 @@ for y in range(-260, 281, 80):
     bg_accent.penup()
 
 
-def random_position():
-    return random.randint(-260, 260), random.randint(-260, 260)
+def random_position(avoid_turtles=(), min_distance=MIN_SPAWN_DISTANCE, attempts=200):
+    candidate = (0, 0)
+    for _ in range(attempts):
+        candidate = random.randint(-260, 260), random.randint(-260, 260)
+        if all(math.hypot(candidate[0] - item.xcor(), candidate[1] - item.ycor()) >= min_distance for item in avoid_turtles):
+            return candidate
+    return candidate
+
+
+def place_turtle_randomly(turtle_obj, avoid_turtles=()):
+    turtle_obj.goto(random_position(avoid_turtles=avoid_turtles + (turtle_obj,), min_distance=MIN_SPAWN_DISTANCE))
+
+
+def draw_terrain(level):
+    theme = TERRAIN_THEMES[(level - 1) % len(TERRAIN_THEMES)]
+    screen.bgcolor(theme["bg"])
+    bg_accent.clear()
+    bg_accent.hideturtle()
+    bg_accent.speed(0)
+    bg_accent.penup()
+    bg_accent.color(theme["grid"])
+
+    bg_accent.goto(-295, 295)
+    bg_accent.pendown()
+    bg_accent.pensize(4)
+    for _ in range(4):
+        bg_accent.forward(590)
+        bg_accent.right(90)
+
+    bg_accent.penup()
+    bg_accent.pensize(1)
+
+    if level % 2 == 1:
+        for x in range(-260, 281, 80):
+            bg_accent.goto(x, -295)
+            bg_accent.setheading(90)
+            bg_accent.pendown()
+            bg_accent.forward(590)
+            bg_accent.penup()
+
+        for y in range(-260, 281, 80):
+            bg_accent.goto(-295, y)
+            bg_accent.setheading(0)
+            bg_accent.pendown()
+            bg_accent.forward(590)
+            bg_accent.penup()
+    else:
+        for offset in range(-320, 321, 80):
+            bg_accent.goto(-295, offset)
+            bg_accent.setheading(20)
+            bg_accent.pendown()
+            bg_accent.forward(690)
+            bg_accent.penup()
+
+            bg_accent.goto(295, offset)
+            bg_accent.setheading(200)
+            bg_accent.pendown()
+            bg_accent.forward(690)
+            bg_accent.penup()
+
+    bg_accent.color(theme["accent"])
+    for x in range(-220, 221, 110):
+        for y in range(-220, 221, 110):
+            bg_accent.goto(x, y)
+            bg_accent.dot(10)
+
+
+draw_terrain(1)
 
 
 def register_heart_shape():
@@ -119,6 +197,10 @@ food_icon = turtle.Turtle()
 food_icon.hideturtle()
 food_icon.penup()
 
+mega_food_icon = turtle.Turtle()
+mega_food_icon.hideturtle()
+mega_food_icon.penup()
+
 # Obstacles
 # Fire
 fire = turtle.Turtle()
@@ -151,29 +233,46 @@ life_bonus.color("hot pink")
 life_bonus.penup()
 life_bonus.hideturtle()
 
+# Mega food
+mega_food = turtle.Turtle()
+mega_food.shape("circle")
+mega_food.shapesize(1.6, 1.6)
+mega_food.color("gold")
+mega_food.penup()
+mega_food.hideturtle()
+
 # Score
 score = 0
 lives = 3
+level = 1
 game_over = False
 paused = False
 next_life_spawn_time = None
 life_bonus_expire_time = None
-move_speed = 4
+mega_food_expire_time = None
+move_speed = BASE_MOVE_SPEED
+enemy_speed = BASE_ENEMY_SPEED
 keys_pressed = {"Up": False, "Down": False, "Left": False, "Right": False}
 pickup_radius = 28
+terrain_label = TERRAIN_THEMES[0]["label"]
 
 # Score display
 score_display = turtle.Turtle()
 score_display.hideturtle()
 score_display.penup()
-score_display.goto(95, 252)
+score_display.goto(70, 255)
+
+level_display = turtle.Turtle()
+level_display.hideturtle()
+level_display.penup()
+level_display.goto(205, 255)
 
 title_display = turtle.Turtle()
 title_display.hideturtle()
 title_display.penup()
 title_display.color(HUD_BORDER)
-title_display.goto(0, 272)
-title_display.write("ULTIMATE COLLECT", align="center", font=("Segoe UI", 16, "bold"))
+title_display.goto(0, 289)
+title_display.write("ULTIMATE COLLECT", align="center", font=("Segoe UI", 14, "bold"))
 
 # Lives panel (top-left)
 lives_panel = turtle.Turtle()
@@ -201,18 +300,17 @@ def draw_panel(pen, x, y, width, height, border, fill):
 
 draw_panel(lives_panel, -292, 286, 220, 46, HUD_BORDER, HUD_FILL)
 draw_panel(lives_panel, 72, 286, 220, 46, HUD_BORDER, HUD_FILL)
-draw_panel(lives_panel, -292, -252, 584, 40, HUD_BORDER, STATUS_FILL)
 
 lives_display = turtle.Turtle()
 lives_display.hideturtle()
 lives_display.penup()
-lives_display.goto(-280, 252)
+lives_display.goto(-278, 255)
 
 status_display = turtle.Turtle()
 status_display.hideturtle()
 status_display.penup()
 status_display.color(HUD_BORDER)
-status_display.goto(0, -244)
+status_display.goto(0, -284)
 
 game_over_display = turtle.Turtle()
 game_over_display.hideturtle()
@@ -233,9 +331,33 @@ def update_score_display():
     score_display.write(f"Score: {score:03d}", align="left", font=("Segoe UI", 14, "bold"))
 
 
+def update_level_display():
+    level_display.clear()
+    level_display.write(f"Level: {level}", align="left", font=("Segoe UI", 14, "bold"))
+
+
+def update_hud():
+    update_score_display()
+    update_level_display()
+
+
 def set_status(text):
     status_display.clear()
-    status_display.write(text, align="center", font=("Segoe UI", 12, "normal"))
+    status_display.write(text, align="center", font=("Segoe UI", 10, "normal"))
+
+
+def update_terrain_from_level():
+    global terrain_label
+    terrain = TERRAIN_THEMES[(level - 1) % len(TERRAIN_THEMES)]
+    terrain_label = terrain["label"]
+    draw_terrain(level)
+
+
+def spawn_mega_food():
+    global mega_food_expire_time
+    mega_food.goto(random_position(avoid_turtles=(player, enemy, food, fire, pothole, trap, life_bonus)))
+    mega_food.showturtle()
+    mega_food_expire_time = time.time() + MEGA_FOOD_DURATION
 
 
 def reset_player_position():
@@ -250,6 +372,7 @@ def draw_icons():
     pothole_icon.clear()
     trap_icon.clear()
     food_icon.clear()
+    mega_food_icon.clear()
 
     player_icon.goto(player.xcor(), player.ycor())
     player_icon.write("😀", align="center", font=("Segoe UI Emoji", 20, "normal"))
@@ -269,9 +392,13 @@ def draw_icons():
     food_icon.goto(food.xcor(), food.ycor())
     food_icon.write("🍪", align="center", font=("Segoe UI Emoji", 20, "normal"))
 
+    if mega_food.isvisible():
+        mega_food_icon.goto(mega_food.xcor(), mega_food.ycor())
+        mega_food_icon.write("🌟", align="center", font=("Segoe UI Emoji", 24, "normal"))
+
 
 def lose_life(reason):
-    global lives, game_over, next_life_spawn_time, life_bonus_expire_time
+    global lives, game_over, next_life_spawn_time, life_bonus_expire_time, mega_food_expire_time
 
     lives -= 1
     update_lives_display()
@@ -287,32 +414,43 @@ def lose_life(reason):
     # Schedule a heart to appear 10 seconds after losing a life.
     next_life_spawn_time = time.time() + 10
     life_bonus_expire_time = None
+    mega_food_expire_time = None
     life_bonus.hideturtle()
+    mega_food.hideturtle()
     reset_player_position()
     set_status("Life lost. A bonus heart appears in 10s for 5s.")
 
 
 def restart_game():
-    global score, lives, game_over, paused, next_life_spawn_time, life_bonus_expire_time
+    global score, lives, level, game_over, paused, next_life_spawn_time, life_bonus_expire_time, mega_food_expire_time, move_speed, enemy_speed
 
     score = 0
     lives = 3
+    level = 1
     game_over = False
     paused = False
     next_life_spawn_time = None
     life_bonus_expire_time = None
+    mega_food_expire_time = None
+    move_speed = BASE_MOVE_SPEED
+    enemy_speed = BASE_ENEMY_SPEED
 
     life_bonus.hideturtle()
-    food.goto(random_position())
-    fire.goto(random_position())
-    pothole.goto(random_position())
-    trap.goto(random_position())
+    mega_food.hideturtle()
     reset_player_position()
+    update_terrain_from_level()
+
+    player.goto(random_position())
+    enemy.goto(random_position(avoid_turtles=(player,)))
+    food.goto(random_position(avoid_turtles=(player, enemy)))
+    fire.goto(random_position(avoid_turtles=(player, enemy, food)))
+    pothole.goto(random_position(avoid_turtles=(player, enemy, food, fire)))
+    trap.goto(random_position(avoid_turtles=(player, enemy, food, fire, pothole)))
 
     game_over_display.clear()
-    update_score_display()
+    update_hud()
     update_lives_display()
-    set_status("Hold arrow keys to move | P pause/resume | Collect hearts to regain life")
+    set_status("Arrows move | P pause/resume | R restart | Collect hearts to regain life")
     draw_icons()
 
 
@@ -328,8 +466,8 @@ def toggle_pause():
 
 
 update_lives_display()
-update_score_display()
-set_status("Hold arrow keys to move | P pause/resume | Collect hearts to regain life")
+update_hud()
+set_status("Arrows move | P pause/resume | R restart | Collect hearts to regain life")
 draw_icons()
 
 # Movement functions
@@ -386,7 +524,7 @@ screen.onkey(restart_game, "R")
 
 # Game loop
 def game_loop():
-    global score, game_over, next_life_spawn_time, life_bonus_expire_time, lives
+    global score, game_over, next_life_spawn_time, life_bonus_expire_time, mega_food_expire_time, lives, level, move_speed, enemy_speed
 
     if game_over:
         return
@@ -412,7 +550,7 @@ def game_loop():
 
     # Spawn heart 10 seconds after a life loss and keep it visible for 5 seconds.
     if next_life_spawn_time is not None and current_time >= next_life_spawn_time:
-        life_bonus.goto(random_position())
+        life_bonus.goto(random_position(avoid_turtles=(player, enemy, food, fire, pothole, trap)))
         life_bonus.showturtle()
         life_bonus_expire_time = current_time + 5
         next_life_spawn_time = None
@@ -421,28 +559,54 @@ def game_loop():
         life_bonus.hideturtle()
         life_bonus_expire_time = None
 
+    if mega_food.isvisible() and mega_food_expire_time is not None and current_time >= mega_food_expire_time:
+        mega_food.hideturtle()
+        mega_food_expire_time = None
+
     # Food collision
     if player.distance(food) < 20:
-        food.goto(random_position())
+        place_turtle_randomly(food, avoid_turtles=(player, enemy, fire, pothole, trap, life_bonus))
         score += 1
-        update_score_display()
-        set_status("Yum! Keep collecting")
+        if score % MEGA_FOOD_SCORE == 0:
+            spawn_mega_food()
+            set_status(f"Mega food is out for {MEGA_FOOD_DURATION} seconds")
+        else:
+            set_status("Yum! Keep collecting")
 
-        # Optional: increase difficulty
-        if score % 5 == 0:
-            enemy.setx(enemy.xcor() + 2)
-            set_status("Enemy speed increased")
+        new_level = score // LEVEL_UP_SCORE + 1
+        if new_level != level:
+            level = new_level
+            move_speed = BASE_MOVE_SPEED + (level - 1) // 2
+            enemy_speed = BASE_ENEMY_SPEED + (level - 1) // 2
+            update_terrain_from_level()
+            set_status(f"Level {level}: {terrain_label} terrain")
+        update_hud()
+
+    if mega_food.isvisible() and player.distance(mega_food) < 24:
+        mega_food.hideturtle()
+        mega_food_expire_time = None
+        score += 3
+        update_hud()
+        set_status("Mega food bonus collected")
+        new_level = score // LEVEL_UP_SCORE + 1
+        if new_level != level:
+            level = new_level
+            move_speed = BASE_MOVE_SPEED + (level - 1) // 2
+            enemy_speed = BASE_ENEMY_SPEED + (level - 1) // 2
+            update_terrain_from_level()
+            set_status(f"Level {level}: {terrain_label} terrain")
+            update_hud()
 
     # Enemy movement (slow chasing)
     if enemy.xcor() < player.xcor():
-        enemy.setx(enemy.xcor() + 1)
+        enemy.setx(enemy.xcor() + enemy_speed)
     if enemy.xcor() > player.xcor():
-        enemy.setx(enemy.xcor() - 1)
+        enemy.setx(enemy.xcor() - enemy_speed)
 
     if enemy.ycor() < player.ycor():
-        enemy.sety(enemy.ycor() + 1)
+        enemy.sety(enemy.ycor() + enemy_speed)
     if enemy.ycor() > player.ycor():
-        enemy.sety(enemy.ycor() - 1)
+        enemy.sety(enemy.ycor() - enemy_speed)
 
     # Collect bonus life first so it is not lost to same-frame enemy/obstacle hits.
     if life_bonus.isvisible() and player.distance(life_bonus) < pickup_radius:
