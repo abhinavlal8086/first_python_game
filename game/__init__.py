@@ -1,0 +1,1 @@
+"""Ultimate Collect HD package."""
