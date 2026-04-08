@@ -10,7 +10,10 @@ from dataclasses import dataclass
 import pygame
 
 from . import config
+from .assets import ASSET_ROOT
+from .audio import AudioSystem
 from .entities import Actor, Enemy, Pickup, Timers, WeaponInventory, WeaponSlot
+from .effects import EffectSystem
 from .logic import clamp, collided, level_from_score, should_spawn_mega
 from .sprites import SpriteLibrary
 from .storage import HighScoreWriter, load_high_score
@@ -89,13 +92,24 @@ class Game:
         self.background_surface: pygame.Surface | None = None
         self.background_level = -1
         self.current_decor = DecorationData(level=1, stars=[], lines=[], orbs=[])
-        self.sprites = SpriteLibrary()
+        self.asset_root = ASSET_ROOT
+        self.sprites = SpriteLibrary(asset_root=self.asset_root, use_external=True)
+        self.effects = EffectSystem()
+        self.audio = AudioSystem(self.asset_root)
+
+        self.camera_offset = pygame.Vector2(0, 0)
+        self.shake_time_left = 0.0
+        self.shake_total_time = 0.0
+        self.shake_strength = 0.0
+        self.damage_flash_alpha = 0.0
+        self.flash_surface = pygame.Surface((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), pygame.SRCALPHA)
 
         self.terrain_worker = TerrainWorker(config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
         self.terrain_worker.request(1)
         self.terrain_worker.request(2)
 
         self.score_writer = HighScoreWriter(config.HIGH_SCORE_PATH)
+        self.audio.start_music()
 
         self._reset_world()
 
@@ -109,6 +123,7 @@ class Game:
 
         self.score_writer.close()
         self.terrain_worker.close()
+        self.audio.shutdown()
         pygame.quit()
 
     def _handle_events(self) -> None:
@@ -154,6 +169,8 @@ class Game:
 
     def _update(self, dt: float) -> None:
         self.anim_time += dt
+        self._update_feedback_effects(dt)
+        self.effects.update(dt)
         self._consume_terrain_results()
         self._move_player(dt)
 
@@ -192,7 +209,10 @@ class Game:
         if self.background_surface is None or self.background_level != self.level:
             self._rebuild_background()
 
-        self.screen.blit(self.background_surface, (0, 0))
+        self.screen.fill((0, 0, 0))
+        bg_x = int(self.camera_offset.x * 0.35)
+        bg_y = int(self.camera_offset.y * 0.35)
+        self.screen.blit(self.background_surface, (bg_x, bg_y))
 
         self._draw_food()
         self._draw_hazards()
@@ -201,6 +221,7 @@ class Game:
         self._draw_enemy(self.enemy)
         if self.level >= 5:
             self._draw_enemy(self.gorilla)
+        self.effects.draw(self.screen, self.camera_offset)
 
         self._draw_hud()
         if self.paused and not self.game_over:
@@ -208,6 +229,10 @@ class Game:
         if self.game_over:
             self._draw_center_text("GAME OVER", self.font_h1, config.DANGER_COLOR, y=-24)
             self._draw_center_text("Press R or SPACE to restart", self.font_h3, config.TEXT_COLOR, y=18)
+
+        if self.damage_flash_alpha > 0:
+            self.flash_surface.fill((*config.HIT_FLASH_COLOR, int(self.damage_flash_alpha)))
+            self.screen.blit(self.flash_surface, (0, 0))
 
         pygame.display.flip()
 
@@ -228,6 +253,7 @@ class Game:
         self.life_bonus.active = False
         for drop in self.weapon_drops.values():
             drop.active = False
+        self._reset_feedback_effects()
         self._reset_world()
         self._rebuild_background()
         self.terrain_worker.request(1)
@@ -334,6 +360,7 @@ class Game:
             return False
 
         self.score += 1
+        self.audio.play_sfx("pickup")
         blockers = self._all_spawn_targets()
         self.food.pos.update(self._random_position(blockers, self.food.radius))
         self._relocate_hazards()
@@ -358,6 +385,8 @@ class Game:
         self.timers.mega_expires_at = None
         self.score += 3
         self.status_text = "Mega food bonus +3"
+        self.audio.play_sfx("mega")
+        self.effects.spawn_hit(self.mega_food.pos, pygame.Vector2(1, 0))
         return True
 
     def _after_score_changed(self) -> None:
@@ -369,6 +398,7 @@ class Game:
         if new_level != self.level:
             self.level = new_level
             self.status_text = f"Level {self.level}: {self._theme_name()}"
+            self.audio.play_sfx("level_up")
             self.terrain_worker.request(self.level)
             self.terrain_worker.request(self.level + 1)
             self.background_level = -1
@@ -434,6 +464,7 @@ class Game:
                 if slot is WeaponSlot.CAPTURE:
                     self.inventory.capture_charges = config.CAPTURE_CHARGES_PER_PICKUP
                 self.status_text = f"Picked {self._weapon_label(slot)}"
+                self.audio.play_sfx("weapon_pick")
                 picked = True
 
         if picked:
@@ -449,49 +480,70 @@ class Game:
     def _fire_weapon(self) -> None:
         if self.level < config.WEAPON_UNLOCK_LEVEL:
             self.status_text = "Weapons unlock at level 3"
+            self.audio.play_sfx("empty")
             return
 
         target = self._nearest_enemy_in_range(max_distance=300.0)
+        aim_direction = pygame.Vector2(-1 if self.player_facing_left else 1, 0)
+        if target is not None:
+            delta = target.pos - self.player.pos
+            if delta.length_squared() > 0:
+                aim_direction = delta.normalize()
         if target is None:
             self.status_text = "No enemy in range"
+            self.audio.play_sfx("empty")
             return
 
         selected = self.inventory.selected
 
         if selected is WeaponSlot.ARROW and self.inventory.slots[WeaponSlot.ARROW.value]:
             self.inventory.slots[WeaponSlot.ARROW.value] = False
-            self._apply_weapon_kill(target, "Arrow hit")
+            self.effects.spawn_muzzle_flash(self.player.pos, aim_direction)
+            self.audio.play_sfx("fire")
+            self._apply_weapon_kill(target, "Arrow hit", aim_direction)
             return
 
         if selected is WeaponSlot.GUN and self.inventory.slots[WeaponSlot.GUN.value]:
             if self.inventory.gun_bullets <= 0:
                 self.inventory.slots[WeaponSlot.GUN.value] = False
                 self.status_text = "Out of bullets"
+                self.audio.play_sfx("empty")
                 return
             self.inventory.gun_bullets -= 1
             if self.inventory.gun_bullets <= 0:
                 self.inventory.slots[WeaponSlot.GUN.value] = False
-            self._apply_weapon_kill(target, f"Gun hit ({self.inventory.gun_bullets} bullets left)")
+            self.effects.spawn_muzzle_flash(self.player.pos, aim_direction)
+            self.audio.play_sfx("fire")
+            self._apply_weapon_kill(target, f"Gun hit ({self.inventory.gun_bullets} bullets left)", aim_direction)
             return
 
         if selected is WeaponSlot.CAPTURE and self.inventory.slots[WeaponSlot.CAPTURE.value]:
             if target is not self.enemy:
                 self.status_text = "Capture gun works only on devil"
+                self.audio.play_sfx("empty")
                 return
             if self.inventory.capture_charges <= 0:
                 self.inventory.slots[WeaponSlot.CAPTURE.value] = False
                 self.status_text = "No capture charges"
+                self.audio.play_sfx("empty")
                 return
             self.inventory.capture_charges -= 1
             if self.inventory.capture_charges <= 0:
                 self.inventory.slots[WeaponSlot.CAPTURE.value] = False
-            self._apply_weapon_kill(target, "Devil captured")
+            self.effects.spawn_muzzle_flash(self.player.pos, aim_direction)
+            self.audio.play_sfx("fire")
+            self._apply_weapon_kill(target, "Devil captured", aim_direction)
             return
 
         self.status_text = "Selected weapon slot is empty"
+        self.audio.play_sfx("empty")
 
-    def _apply_weapon_kill(self, target: Enemy, action_text: str) -> None:
+    def _apply_weapon_kill(self, target: Enemy, action_text: str, hit_direction: pygame.Vector2) -> None:
         self.score += config.WEAPON_SCORE_BONUS
+        hit_position = target.pos.copy()
+        self.effects.spawn_hit(hit_position, hit_direction)
+        self._trigger_camera_shake(config.CAMERA_SHAKE_DEFAULT_STRENGTH, config.CAMERA_SHAKE_DEFAULT_DURATION)
+        self.audio.play_sfx("hit")
 
         blockers = self._all_spawn_targets()
         target.pos.update(self._random_position(blockers, target.radius))
@@ -548,6 +600,10 @@ class Game:
 
     def _lose_life(self, reason: str) -> None:
         self.lives -= 1
+        self.effects.spawn_damage(self.player.pos)
+        self._trigger_camera_shake(config.CAMERA_SHAKE_DAMAGE_STRENGTH, config.CAMERA_SHAKE_DAMAGE_DURATION)
+        self.damage_flash_alpha = max(self.damage_flash_alpha, config.MAX_DAMAGE_FLASH_ALPHA)
+        self.audio.play_sfx("hurt")
         self.life_bonus.active = False
         self.mega_food.active = False
         for drop in self.weapon_drops.values():
@@ -577,6 +633,38 @@ class Game:
 
     def _is_touching(self, a: Actor | Pickup, b: Actor | Pickup, margin: float = 0.0) -> bool:
         return collided(a.pos.x, a.pos.y, a.radius, b.pos.x, b.pos.y, b.radius, margin=margin)
+
+    def _reset_feedback_effects(self) -> None:
+        self.camera_offset.update(0, 0)
+        self.shake_time_left = 0.0
+        self.shake_total_time = 0.0
+        self.shake_strength = 0.0
+        self.damage_flash_alpha = 0.0
+        self.effects.particles.clear()
+        self.effects.rings.clear()
+        self.effects.slashes.clear()
+
+    def _trigger_camera_shake(self, strength: float, duration: float) -> None:
+        if duration <= 0:
+            return
+        self.shake_strength = max(self.shake_strength, strength)
+        self.shake_time_left = max(self.shake_time_left, duration)
+        self.shake_total_time = max(self.shake_total_time, duration)
+
+    def _update_feedback_effects(self, dt: float) -> None:
+        if self.shake_time_left > 0:
+            self.shake_time_left = max(0.0, self.shake_time_left - dt)
+            falloff = self.shake_time_left / max(0.001, self.shake_total_time)
+            intensity = self.shake_strength * falloff
+            self.camera_offset.x = random.uniform(-intensity, intensity)
+            self.camera_offset.y = random.uniform(-intensity, intensity)
+            if self.shake_time_left <= 0:
+                self.shake_strength = 0.0
+                self.shake_total_time = 0.0
+                self.camera_offset.update(0, 0)
+
+        if self.damage_flash_alpha > 0:
+            self.damage_flash_alpha = max(0.0, self.damage_flash_alpha - config.DAMAGE_FLASH_DECAY * dt)
 
     def _consume_terrain_results(self) -> None:
         while True:
@@ -646,7 +734,7 @@ class Game:
             if not drop.active:
                 continue
             pulse = 21 + int(abs(math.sin(self.anim_time * 4.0)) * 4)
-            pygame.draw.circle(self.screen, (131, 198, 255, 120), (drop.pos.x, drop.pos.y), pulse)
+            pygame.draw.circle(self.screen, (131, 198, 255), self._screen_pos(drop.pos), pulse, width=2)
             self._blit_center(self.sprites.weapon_sprite(slot), drop.pos)
 
     def _draw_player(self) -> None:
@@ -662,8 +750,11 @@ class Game:
         self._blit_center(enemy_sprite, enemy.pos)
 
     def _blit_center(self, sprite: pygame.Surface, position: pygame.Vector2) -> None:
-        rect = sprite.get_rect(center=(position.x, position.y))
+        rect = sprite.get_rect(center=self._screen_pos(position))
         self.screen.blit(sprite, rect)
+
+    def _screen_pos(self, position: pygame.Vector2) -> tuple[int, int]:
+        return int(position.x + self.camera_offset.x), int(position.y + self.camera_offset.y)
 
     def _draw_hud(self) -> None:
         hud = pygame.Rect(18, 18, config.WINDOW_WIDTH - 36, 82)

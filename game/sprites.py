@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pygame
 
+from .assets import ASSET_ROOT, try_load_image, try_load_sheet
 from .entities import WeaponSlot
 
 
@@ -21,7 +23,8 @@ def _draw_shadow(surface: pygame.Surface, color: tuple[int, int, int, int]) -> N
 class SpriteLibrary:
     """Pre-renders all gameplay icons to keep frame rendering lightweight."""
 
-    def __init__(self) -> None:
+    def __init__(self, asset_root: Path | None = None, use_external: bool = True) -> None:
+        self.asset_root = asset_root or ASSET_ROOT
         self.runner_frames = [self._build_runner_sprite(phase) for phase in (-1.0, -0.2, 1.0, 0.2)]
         self.zombie_frames = [self._build_zombie_sprite(phase, brute=False) for phase in (-1.0, -0.3, 1.0, 0.3)]
         self.brute_frames = [self._build_zombie_sprite(phase, brute=True) for phase in (-1.0, -0.3, 1.0, 0.3)]
@@ -39,6 +42,43 @@ class SpriteLibrary:
             WeaponSlot.GUN: self._build_weapon_gun(),
             WeaponSlot.CAPTURE: self._build_weapon_capture(),
         }
+
+        if use_external:
+            self._apply_external_assets()
+
+    def _apply_external_assets(self) -> None:
+        sprite_dir = self.asset_root / "sprites"
+
+        self._try_assign_sheet(sprite_dir / "player_runner_sheet.png", (72, 72), 4, "runner_frames")
+        self._try_assign_sheet(sprite_dir / "zombie_sheet.png", (72, 72), 4, "zombie_frames")
+        self._try_assign_sheet(sprite_dir / "brute_sheet.png", (78, 78), 4, "brute_frames")
+        self._try_assign_sheet(sprite_dir / "fire_sheet.png", (66, 66), 4, "fire_frames")
+        self._try_assign_sheet(sprite_dir / "mega_sheet.png", (64, 64), 6, "mega_frames")
+
+        self._try_assign_single(sprite_dir / "hazard_trap.png", "trap_surface")
+        self._try_assign_single(sprite_dir / "hazard_pothole.png", "pothole_surface")
+        self._try_assign_single(sprite_dir / "pickup_food.png", "food_surface")
+        self._try_assign_single(sprite_dir / "pickup_heart.png", "heart_surface")
+
+        arrow = try_load_image(sprite_dir / "weapon_arrow.png")
+        gun = try_load_image(sprite_dir / "weapon_gun.png")
+        capture = try_load_image(sprite_dir / "weapon_capture.png")
+        if arrow is not None:
+            self.weapon_icons[WeaponSlot.ARROW] = arrow
+        if gun is not None:
+            self.weapon_icons[WeaponSlot.GUN] = gun
+        if capture is not None:
+            self.weapon_icons[WeaponSlot.CAPTURE] = capture
+
+    def _try_assign_sheet(self, path: Path, frame_size: tuple[int, int], count: int, field_name: str) -> None:
+        frames = try_load_sheet(path, frame_size=frame_size, count=count)
+        if frames:
+            setattr(self, field_name, frames)
+
+    def _try_assign_single(self, path: Path, field_name: str) -> None:
+        image = try_load_image(path)
+        if image is not None:
+            setattr(self, field_name, image)
 
     def player_sprite(self, anim_time: float, moving: bool, facing_left: bool) -> pygame.Surface:
         index = int(anim_time * 9.0) % len(self.runner_frames) if moving else 1
