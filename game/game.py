@@ -456,13 +456,16 @@ class Game:
             config.WINDOW_WIDTH - config.PLAYFIELD_MARGIN * 2,
             config.WINDOW_HEIGHT - config.PLAYFIELD_TOP - config.PLAYFIELD_MARGIN,
         )
-        pygame.draw.rect(self.screen, (104, 53, 38), play_rect, width=4)
+        pygame.draw.rect(self.screen, (124, 68, 49), play_rect, width=4)
 
-        y = config.PLAYFIELD_TOP - 8
-        stripe_w = 28
-        for x in range(config.PLAYFIELD_MARGIN, config.WINDOW_WIDTH - config.PLAYFIELD_MARGIN, stripe_w):
-            color = (255, 171, 94) if ((x // stripe_w) % 2 == 0) else (85, 47, 33)
-            pygame.draw.rect(self.screen, color, pygame.Rect(x, y, stripe_w, 8))
+        boundary_bar = pygame.Rect(
+            config.PLAYFIELD_MARGIN,
+            config.PLAYFIELD_TOP - 10,
+            config.WINDOW_WIDTH - config.PLAYFIELD_MARGIN * 2,
+            10,
+        )
+        pygame.draw.rect(self.screen, (88, 48, 35), boundary_bar)
+        pygame.draw.rect(self.screen, (214, 126, 78), boundary_bar, width=1)
 
     def _pause_options(self) -> list[str]:
         return [
@@ -1065,26 +1068,35 @@ class Game:
             b = int(config.BG_TOP[2] + (config.BG_BOTTOM[2] - config.BG_TOP[2]) * blend)
             pygame.draw.line(surface, (r, g, b), (0, y), (config.WINDOW_WIDTH, y))
 
-        # Ash fog bands.
-        for i in range(16):
-            y = 80 + i * 38
-            color = (80 + i * 3, 52 + i * 2, 40 + i)
-            pygame.draw.line(surface, color, (0, y), (config.WINDOW_WIDTH, y + (i % 3) * 5), 2)
+        # Horizon haze and ruined skyline blocks for a clean apocalyptic look.
+        horizon_y = config.PLAYFIELD_TOP + 70
+        haze = pygame.Surface((config.WINDOW_WIDTH, 140), pygame.SRCALPHA)
+        for i in range(140):
+            alpha = max(0, 120 - i)
+            pygame.draw.line(haze, (110, 72, 54, alpha), (0, i), (config.WINDOW_WIDTH, i))
+        surface.blit(haze, (0, horizon_y - 80))
 
-        grid_step = 64
-        for x in range(0, config.WINDOW_WIDTH + 1, grid_step):
-            pygame.draw.line(surface, config.GRID_COLOR, (x, config.PLAYFIELD_TOP), (x, config.WINDOW_HEIGHT), 1)
-        for y in range(config.PLAYFIELD_TOP, config.WINDOW_HEIGHT + 1, grid_step):
-            pygame.draw.line(surface, config.GRID_COLOR, (0, y), (config.WINDOW_WIDTH, y), 1)
+        skyline_color = (58, 36, 28)
+        x = 0
+        while x < config.WINDOW_WIDTH:
+            w = random.randint(36, 96)
+            h = random.randint(28, 92)
+            pygame.draw.rect(surface, skyline_color, pygame.Rect(x, horizon_y - h, w, h))
+            x += w + random.randint(6, 18)
 
+        # Subtle dust specks only (no graph lines/circles).
         if self.current_decor.level == self.level:
             for x, y, radius in self.current_decor.stars:
-                ash = (170, 130, 95)
-                pygame.draw.circle(surface, ash, (x, y), max(1, radius - 1))
-            for start, end in self.current_decor.lines:
-                pygame.draw.line(surface, theme.accent, start, end, 2)
-            for x, y, radius in self.current_decor.orbs:
-                pygame.draw.circle(surface, theme.base, (x, y), radius, width=2)
+                if y < config.PLAYFIELD_TOP:
+                    continue
+                dust = (156, 116, 90)
+                size = 1 if radius <= 2 else 2
+                pygame.draw.rect(surface, dust, pygame.Rect(x, y, size, size))
+
+        # Darken lower ground to increase contrast with icons.
+        ground = pygame.Surface((config.WINDOW_WIDTH, config.WINDOW_HEIGHT - config.PLAYFIELD_TOP), pygame.SRCALPHA)
+        ground.fill((20, 8, 5, 70))
+        surface.blit(ground, (0, config.PLAYFIELD_TOP))
 
         pygame.draw.rect(
             surface,
