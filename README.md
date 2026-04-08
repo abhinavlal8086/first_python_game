@@ -7,6 +7,10 @@ An arcade-style survival game rebuilt with `pygame` for smoother performance, HD
 - Upgraded from `turtle` to `pygame` for faster rendering and input handling.
 - Modularized into a package (`game/`) with separate config, entities, logic, persistence, and terrain worker modules.
 - Added background multithreading for terrain decoration precompute.
+- Added PNG sprite-sheet asset loading with procedural fallback.
+- Added combat feedback: hit slashes, muzzle flashes, and particle bursts.
+- Added camera shake and damage flash for impact readability.
+- Added sound effects and looping background music.
 - Added non-blocking high score persistence with a writer thread.
 - Added unit tests and CI checks.
 
@@ -22,6 +26,10 @@ An arcade-style survival game rebuilt with `pygame` for smoother performance, HD
   - Arrow (single use)
   - Gun (15 bullets)
   - Capture gun (works on devil)
+- PNG sprite-sheet character/hazard icon pipeline (`assets/sprites`)
+- Hit animations: slash, muzzle flash, impact particles
+- Camera shake + damage flash on combat/damage events
+- Sound FX + background loop music (`assets/audio`)
 - Kill streak event banner
 - Persistent high score (`high_score.json`)
 - FPS indicator in HUD
@@ -33,12 +41,21 @@ An arcade-style survival game rebuilt with `pygame` for smoother performance, HD
 ├── .github/workflows/ci.yml
 ├── game/
 │   ├── __init__.py
+│   ├── assets.py
+│   ├── audio.py
 │   ├── config.py
 │   ├── entities.py
+│   ├── effects.py
 │   ├── game.py
 │   ├── logic.py
+│   ├── sprites.py
 │   ├── storage.py
 │   └── terrain_worker.py
+├── assets/
+│   ├── audio/
+│   └── sprites/
+├── tools/
+│   └── generate_starter_assets.py
 ├── tests/
 │   └── test_logic.py
 ├── .gitignore
@@ -67,6 +84,16 @@ pip install -r requirements.txt
 python main.py
 ```
 
+## Regenerate Art/Audio Asset Pack
+
+If you want to refresh the bundled starter assets:
+
+```bash
+python tools/generate_starter_assets.py
+```
+
+The game auto-loads PNG/WAV assets if present and falls back to built-in procedural visuals when any asset is missing.
+
 ## Controls
 
 - `WASD` / `Arrow keys`: move
@@ -94,6 +121,8 @@ black --check .
 - Cached background surfaces reduce per-frame drawing overhead.
 - Collision checks use squared distance math to avoid unnecessary square roots.
 - Terrain decoration data is generated on a worker thread so level transitions remain smooth.
+- Sprite-sheet extraction is done once on startup, then reused per frame.
+- Particle and flash systems are short-lived and capped to maintain stable FPS.
 - High score writes are asynchronous to avoid frame hitching.
 
 ## License

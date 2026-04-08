@@ -4,3 +4,10 @@ __pycache__/
 .venv/
 .vscode/
 high_score.json
+
+# Generated local asset pack (created by tools/generate_starter_assets.py)
+assets/sprites/*.png
+assets/audio/*.wav
+
+# Misc local artifacts
+nul

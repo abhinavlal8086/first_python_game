@@ -5,14 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 import math
 import struct
+import sys
 import wave
 
 import pygame
 
+
+ROOT = Path(__file__).resolve().parents[1]
+if ROOT.as_posix() not in sys.path:
+    sys.path.insert(0, ROOT.as_posix())
+
+from game.entities import WeaponSlot
 from game.sprites import SpriteLibrary
 
 
-ROOT = Path(__file__).resolve().parents[1]
 SPRITES_DIR = ROOT / "assets" / "sprites"
 AUDIO_DIR = ROOT / "assets" / "audio"
 
@@ -92,9 +98,9 @@ def main() -> None:
     _save_single(SPRITES_DIR / "hazard_pothole.png", sprites.pothole_surface)
     _save_single(SPRITES_DIR / "pickup_food.png", sprites.food_surface)
     _save_single(SPRITES_DIR / "pickup_heart.png", sprites.heart_surface)
-    _save_single(SPRITES_DIR / "weapon_arrow.png", sprites.weapon_icons[sprites.weapon_icons.keys().__iter__().__next__()])
-    _save_single(SPRITES_DIR / "weapon_gun.png", sprites.weapon_icons[list(sprites.weapon_icons.keys())[1]])
-    _save_single(SPRITES_DIR / "weapon_capture.png", sprites.weapon_icons[list(sprites.weapon_icons.keys())[2]])
+    _save_single(SPRITES_DIR / "weapon_arrow.png", sprites.weapon_icons[WeaponSlot.ARROW])
+    _save_single(SPRITES_DIR / "weapon_gun.png", sprites.weapon_icons[WeaponSlot.GUN])
+    _save_single(SPRITES_DIR / "weapon_capture.png", sprites.weapon_icons[WeaponSlot.CAPTURE])
 
     _build_sfx()
     _build_music_loop()
