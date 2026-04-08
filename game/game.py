@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 import time
 from dataclasses import dataclass
@@ -196,7 +197,7 @@ class Game:
         self._draw_food()
         self._draw_hazards()
         self._draw_weapon_drops()
-        self._draw_actor(self.player.pos, config.PLAYER_RADIUS, (90, 185, 255), outline=(17, 42, 71))
+        self._draw_player()
         self._draw_enemy(self.enemy)
         if self.level >= 5:
             self._draw_enemy(self.gorilla)
@@ -623,58 +624,46 @@ class Game:
         self.background_level = self.level
 
     def _draw_food(self) -> None:
-        pygame.draw.circle(self.screen, (255, 208, 97), self.food.pos, config.FOOD_RADIUS)
-        pygame.draw.circle(self.screen, (121, 85, 33), self.food.pos, config.FOOD_RADIUS, width=2)
+        self._blit_center(self.sprites.food_surface, self.food.pos)
 
         if self.mega_food.active:
-            pygame.draw.circle(self.screen, (255, 244, 148), self.mega_food.pos, config.MEGA_FOOD_RADIUS)
-            pygame.draw.circle(self.screen, (245, 172, 21), self.mega_food.pos, config.MEGA_FOOD_RADIUS, width=3)
+            self._blit_center(self.sprites.mega_sprite(self.anim_time), self.mega_food.pos)
 
         if self.life_bonus.active:
-            pygame.draw.circle(self.screen, (255, 97, 133), self.life_bonus.pos, config.PICKUP_RADIUS)
-            pygame.draw.circle(self.screen, (255, 229, 236), self.life_bonus.pos, config.PICKUP_RADIUS - 5)
+            self._blit_center(self.sprites.heart_surface, self.life_bonus.pos)
 
     def _draw_hazards(self) -> None:
         fire = self.hazards["fire"]
         pothole = self.hazards["pothole"]
         trap = self.hazards["trap"]
 
-        pygame.draw.circle(self.screen, (255, 118, 73), fire.pos, fire.radius)
-        pygame.draw.circle(self.screen, (131, 20, 18), fire.pos, fire.radius, width=2)
-
-        pygame.draw.circle(self.screen, (30, 32, 38), pothole.pos, pothole.radius)
-        pygame.draw.circle(self.screen, (70, 72, 78), pothole.pos, pothole.radius, width=2)
-
-        p = trap.pos
-        points = [(p.x, p.y - trap.radius), (p.x - trap.radius, p.y + trap.radius), (p.x + trap.radius, p.y + trap.radius)]
-        pygame.draw.polygon(self.screen, (209, 104, 255), points)
-        pygame.draw.polygon(self.screen, (93, 23, 126), points, width=2)
+        self._blit_center(self.sprites.fire_sprite(self.anim_time), fire.pos)
+        self._blit_center(self.sprites.pothole_surface, pothole.pos)
+        self._blit_center(self.sprites.trap_surface, trap.pos)
 
     def _draw_weapon_drops(self) -> None:
         for slot, drop in self.weapon_drops.items():
             if not drop.active:
                 continue
-            color = (215, 222, 230)
-            pygame.draw.circle(self.screen, color, drop.pos, drop.radius)
-            pygame.draw.circle(self.screen, (90, 100, 113), drop.pos, drop.radius, width=2)
-            label = self._weapon_short(slot)
-            text = self.font_sm.render(label, True, (42, 54, 68))
-            rect = text.get_rect(center=(drop.pos.x, drop.pos.y))
-            self.screen.blit(text, rect)
+            pulse = 21 + int(abs(math.sin(self.anim_time * 4.0)) * 4)
+            pygame.draw.circle(self.screen, (131, 198, 255, 120), (drop.pos.x, drop.pos.y), pulse)
+            self._blit_center(self.sprites.weapon_sprite(slot), drop.pos)
 
-    def _draw_actor(self, pos: pygame.Vector2, radius: int, color: tuple[int, int, int], outline: tuple[int, int, int]) -> None:
-        pygame.draw.circle(self.screen, color, pos, radius)
-        pygame.draw.circle(self.screen, outline, pos, radius, width=2)
+    def _draw_player(self) -> None:
+        player_sprite = self.sprites.player_sprite(
+            anim_time=self.anim_time,
+            moving=self.player_is_running,
+            facing_left=self.player_facing_left,
+        )
+        self._blit_center(player_sprite, self.player.pos)
 
     def _draw_enemy(self, enemy: Enemy) -> None:
-        color = (255, 102, 102) if enemy.kind == "devil" else (126, 85, 66)
-        outline = (108, 23, 23) if enemy.kind == "devil" else (58, 35, 23)
+        enemy_sprite = self.sprites.zombie_sprite(self.anim_time, brute=(enemy.kind == "gorilla"))
+        self._blit_center(enemy_sprite, enemy.pos)
 
-        p = enemy.pos
-        r = enemy.radius
-        points = [(p.x, p.y - r), (p.x - r, p.y + r), (p.x + r, p.y + r)]
-        pygame.draw.polygon(self.screen, color, points)
-        pygame.draw.polygon(self.screen, outline, points, width=2)
+    def _blit_center(self, sprite: pygame.Surface, position: pygame.Vector2) -> None:
+        rect = sprite.get_rect(center=(position.x, position.y))
+        self.screen.blit(sprite, rect)
 
     def _draw_hud(self) -> None:
         hud = pygame.Rect(18, 18, config.WINDOW_WIDTH - 36, 82)
