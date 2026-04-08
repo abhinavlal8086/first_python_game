@@ -1,0 +1,68 @@
+"""Configuration constants for Ultimate Collect HD."""
+
+from dataclasses import dataclass
+
+
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 720
+TARGET_FPS = 144
+WORLD_PADDING = 40
+
+BG_TOP = (11, 26, 48)
+BG_BOTTOM = (24, 54, 74)
+GRID_COLOR = (34, 81, 117)
+TEXT_COLOR = (240, 248, 255)
+WARNING_COLOR = (255, 206, 84)
+DANGER_COLOR = (255, 82, 82)
+
+PLAYER_RADIUS = 16
+PLAYER_SPEED = 320.0
+
+ENEMY_BASE_SPEED = 130.0
+GORILLA_BONUS_SPEED = 45.0
+ENEMY_RADIUS = 18
+GORILLA_RADIUS = 22
+
+FOOD_RADIUS = 13
+MEGA_FOOD_RADIUS = 19
+HAZARD_RADIUS = 18
+PICKUP_RADIUS = 16
+COLLISION_MARGIN = 1.0
+
+SPAWN_MIN_DISTANCE = 110.0
+
+LEVEL_UP_SCORE = 10
+MEGA_FOOD_SCORE_STEP = 15
+MEGA_FOOD_DURATION = 5.0
+
+WEAPON_UNLOCK_LEVEL = 3
+WEAPON_SCORE_BONUS = 20
+WEAPON_MAX_COUNT = 3
+GUN_BULLETS_PER_PICKUP = 15
+CAPTURE_CHARGES_PER_PICKUP = 1
+KILL_STREAK_WINDOW = 4.0
+
+LIFE_RESPAWN_DELAY = 10.0
+LIFE_PICKUP_DURATION = 5.0
+MAX_LIVES = 3
+
+DROP_RESPAWN_SECONDS = 3.0
+
+HIGH_SCORE_PATH = "high_score.json"
+
+
+@dataclass(frozen=True)
+class Theme:
+    name: str
+    base: tuple[int, int, int]
+    accent: tuple[int, int, int]
+
+
+THEMES = [
+    Theme("GRASSLAND", (34, 122, 86), (84, 190, 136)),
+    Theme("DUNES", (176, 122, 55), (228, 186, 96)),
+    Theme("FROST", (62, 136, 196), (132, 191, 232)),
+    Theme("EMBER", (182, 63, 53), (234, 114, 94)),
+    Theme("AURORA", (112, 73, 182), (163, 125, 228)),
+    Theme("TIDAL", (28, 128, 142), (88, 190, 206)),
+]

@@ -1,42 +1,67 @@
-# Ultimate Collect Game
+# Ultimate Collect HD
 
-A lightweight arcade-style Python game built with `turtle`. Move quickly, collect food, avoid hazards, and survive as the difficulty ramps up with levels and terrain changes.
+An arcade-style survival game rebuilt with `pygame` for smoother performance, HD visuals, and cleaner architecture.
+
+## What Changed
+
+- Upgraded from `turtle` to `pygame` for faster rendering and input handling.
+- Modularized into a package (`game/`) with separate config, entities, logic, persistence, and terrain worker modules.
+- Added background multithreading for terrain decoration precompute.
+- Added non-blocking high score persistence with a writer thread.
+- Added unit tests and CI checks.
 
 ## Features
 
-- Real-time player movement using arrow keys
-- Enemy chase behavior that scales with level
-- Obstacle hazards (fire, pothole, trap)
-- Lives system with delayed bonus-heart recovery
-- Level progression every 10 points
-- Terrain theme updates as levels increase
-- Mega food bonus every 15 points (available for 5 seconds)
-- Pause and restart controls
-
-## Tech Stack
-
-- Python 3.11+
-- Standard library only (`turtle`, `random`, `time`, `math`)
+- HD window rendering (`1280x720`) with themed backgrounds and cached grid visuals
+- Real-time movement (`WASD` or arrows)
+- Enemy chase behavior and level-based difficulty ramp
+- Hazards (fire, pothole, trap)
+- Life system with delayed timed heart pickup
+- Mega food bonus every 15 points (limited lifetime)
+- Weapon system (unlock at level 3):
+  - Arrow (single use)
+  - Gun (15 bullets)
+  - Capture gun (works on devil)
+- Kill streak event banner
+- Persistent high score (`high_score.json`)
+- FPS indicator in HUD
 
 ## Project Structure
 
-```
+```text
 .
+├── .github/workflows/ci.yml
+├── game/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── entities.py
+│   ├── game.py
+│   ├── logic.py
+│   ├── storage.py
+│   └── terrain_worker.py
+├── tests/
+│   └── test_logic.py
+├── .gitignore
+├── LICENSE
 ├── main.py
+├── pyproject.toml
 ├── README.md
-└── LICENSE
+└── requirements.txt
 ```
 
-## Getting Started
+## Requirements
 
-1. Clone the repository:
+- Python 3.11+
+- `pygame` (installed from `requirements.txt`)
+
+## Setup
 
 ```bash
-git clone https://github.com/abhinavlal8086/first_python_game.git
-cd first_python_game
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-2. Run the game:
+## Run
 
 ```bash
 python main.py
@@ -44,24 +69,32 @@ python main.py
 
 ## Controls
 
-- `Up` / `Down` / `Left` / `Right`: Move player
-- `P`: Pause / Resume
-- `R`: Restart game
+- `WASD` / `Arrow keys`: move
+- `P`: pause/resume
+- `R` or `Space`: restart
+- `Z`: pick up nearby weapon drop
+- `1` / `2` / `3`: select Arrow/Gun/Capture weapon
+- `X`: fire selected weapon
 
-## Gameplay Rules
+## Testing
 
-- Collect regular food to increase score.
-- Avoid the monster and obstacle icons; collisions cost one life.
-- Bonus heart appears after life loss (timed pickup) to regain life.
-- Every 10 points, you enter a new level with increased speed and a different terrain style.
-- Every 15 points, mega food spawns for 5 seconds and gives bonus score.
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
 
-## Future Improvements
+## Lint and Format Checks
 
-- High score persistence
-- Sound effects and music
-- Additional enemy types and level-specific mechanics
-- Start menu and difficulty selection
+```bash
+ruff check .
+black --check .
+```
+
+## Notes on Performance
+
+- Cached background surfaces reduce per-frame drawing overhead.
+- Collision checks use squared distance math to avoid unnecessary square roots.
+- Terrain decoration data is generated on a worker thread so level transitions remain smooth.
+- High score writes are asynchronous to avoid frame hitching.
 
 ## License
 
