@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import random
-import sys
 import time
 from dataclasses import dataclass
 
@@ -12,6 +11,7 @@ import pygame
 from . import config
 from .entities import Actor, Enemy, Pickup, Timers, WeaponInventory, WeaponSlot
 from .logic import clamp, collided, level_from_score, should_spawn_mega
+from .sprites import SpriteLibrary
 from .storage import HighScoreWriter, load_high_score
 from .terrain_worker import DecorationData, TerrainWorker
 
@@ -47,6 +47,9 @@ class Game:
         self.status_text = "Collect food. Avoid enemies and hazards."
         self.event_text = ""
         self.event_expires_at: float | None = None
+        self.anim_time = 0.0
+        self.player_facing_left = False
+        self.player_is_running = False
 
         self.kill_streak = 0
         self.last_kill_at: float | None = None
@@ -85,6 +88,7 @@ class Game:
         self.background_surface: pygame.Surface | None = None
         self.background_level = -1
         self.current_decor = DecorationData(level=1, stars=[], lines=[], orbs=[])
+        self.sprites = SpriteLibrary()
 
         self.terrain_worker = TerrainWorker(config.WINDOW_WIDTH, config.WINDOW_HEIGHT)
         self.terrain_worker.request(1)
@@ -148,6 +152,7 @@ class Game:
                     self.input_state["right"] = False
 
     def _update(self, dt: float) -> None:
+        self.anim_time += dt
         self._consume_terrain_results()
         self._move_player(dt)
 
@@ -297,8 +302,14 @@ class Game:
         if self.input_state["right"]:
             direction.x += 1
 
-        if direction.length_squared() > 0:
+        self.player_is_running = direction.length_squared() > 0
+        if self.player_is_running:
             direction = direction.normalize()
+
+        if direction.x > 0.1:
+            self.player_facing_left = False
+        elif direction.x < -0.1:
+            self.player_facing_left = True
 
         self.player.pos += direction * config.PLAYER_SPEED * dt
 
