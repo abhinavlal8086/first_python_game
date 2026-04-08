@@ -4,6 +4,9 @@ __pycache__/
 .venv/
 .vscode/
 high_score.json
+apocalypse_saves.db
+*.db-shm
+*.db-wal
 
 # Generated local asset pack (created by tools/generate_starter_assets.py)
 assets/sprites/*.png

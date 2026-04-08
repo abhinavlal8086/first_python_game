@@ -10,6 +10,8 @@ import pygame
 class AudioSystem:
     def __init__(self, asset_root: Path) -> None:
         self.enabled = False
+        self.sfx_enabled = True
+        self.music_enabled = True
         self.sfx: dict[str, pygame.mixer.Sound] = {}
         self.music_path: Path | None = None
 
@@ -50,7 +52,7 @@ class AudioSystem:
                 continue
 
     def start_music(self) -> None:
-        if not self.enabled or self.music_path is None:
+        if not self.enabled or not self.music_enabled or self.music_path is None:
             return
         try:
             pygame.mixer.music.load(self.music_path.as_posix())
@@ -68,7 +70,7 @@ class AudioSystem:
             return
 
     def play_sfx(self, key: str) -> None:
-        if not self.enabled:
+        if not self.enabled or not self.sfx_enabled:
             return
         sound = self.sfx.get(key)
         if sound is None:
@@ -77,6 +79,18 @@ class AudioSystem:
             sound.play()
         except pygame.error:
             return
+
+    def toggle_music(self) -> bool:
+        self.music_enabled = not self.music_enabled
+        if self.music_enabled:
+            self.start_music()
+        else:
+            self.stop_music()
+        return self.music_enabled
+
+    def toggle_sfx(self) -> bool:
+        self.sfx_enabled = not self.sfx_enabled
+        return self.sfx_enabled
 
     def shutdown(self) -> None:
         self.stop_music()
